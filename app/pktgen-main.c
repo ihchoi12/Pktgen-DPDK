@@ -378,6 +378,11 @@ static void
 pcm_atexit_handler(void)
 {
     extern volatile bool stats_enabled;
+    extern void pcie_log_stop(void);
+
+    /* Stop and flush PCIe logging first */
+    pcie_log_stop();
+
     printf("DEBUG: atexit handler - stats_enabled = %s\n", stats_enabled ? "true" : "false");
     if (stats_enabled) {
         extern int pcm_monitoring_stop_all(void);
@@ -568,6 +573,13 @@ main(int argc, char **argv)
     sigaddset(&set, SIGWINCH);
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
+    /* Initialize PCIe logging (always attempt, independent of stats_enabled) */
+    extern int pcie_log_init(void);
+    extern int pcie_log_start(void);
+    if (pcie_log_init() == 0) {
+        pcie_log_start();
+    }
+
     /* Initialize PCM monitoring when stats_enabled is true */
     extern volatile bool stats_enabled;
     printf("DEBUG: stats_enabled = %s\n", stats_enabled ? "true" : "false");
@@ -587,6 +599,9 @@ main(int argc, char **argv)
         } else {
             printf("PCM monitoring initialization failed or disabled\n");
         }
+    } else {
+        /* Even if stats_enabled is false, register atexit for PCIe log flush */
+        atexit(pcm_atexit_handler);
     }
 
     /* execute the command files if present */

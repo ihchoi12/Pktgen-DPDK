@@ -49,6 +49,7 @@ sources = files(
 	'pktgen-workq.c',
 	'pktgen.c',
 	'pktgen_pcm.c',
+	'pktgen_pcie_log.c',
 	'xorshift64star.c',
 )
 
