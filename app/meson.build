@@ -71,9 +71,9 @@ cpp_args = []
 
 # Add PCM support if available
 if pcm_found
-    # Add include paths for both C and C++ compilation using absolute paths
-    cflags += ['-I' + meson.current_source_dir() / '..' / '..' / 'pcm' / 'src',
-               '-I' + meson.current_source_dir() / '..' / '..' / 'common' / 'pcm']
+    # C files only need common wrapper header (not direct PCM headers which are C++)
+    cflags += ['-I' + meson.current_source_dir() / '..' / '..' / 'common' / 'pcm']
+    # C++ files need both PCM headers and common wrapper
     cpp_args += ['-I' + meson.current_source_dir() / '..' / '..' / 'pcm' / 'src',
                  '-I' + meson.current_source_dir() / '..' / '..' / 'common' / 'pcm']
     ldflags += [pcm_static_lib, '-static-libstdc++', '-static-libgcc', '-lpthread', '-ldl', '-lnuma']
