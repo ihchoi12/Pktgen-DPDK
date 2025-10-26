@@ -71,8 +71,8 @@ cpp_args = []
 
 # Add PCM support if available
 if pcm_found
-    # Add PCM includes for both C and C++ files (needed for common_pcm_wrapper.h)
     cpp_args += ['-I../../pcm/src', '-I../../common/pcm']
+    cflags += ['-I../../pcm/src', '-I../../common/pcm']
     includes += include_directories('../../pcm/src', '../../common/pcm')
     ldflags += [pcm_static_lib, '-static-libstdc++', '-static-libgcc', '-lpthread', '-ldl', '-lnuma']
 endif
