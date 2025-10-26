@@ -18,7 +18,6 @@ TXlib */
 #include <rte_arp.h>
 #include <rte_cycles.h>
 #include <rte_hexdump.h>
-#include <rte_timer.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -1780,15 +1779,16 @@ _timer_thread(void *arg)
             process = curr + pktgen.stats_timeout;
             pktgen_process_stats();
             prev = curr;
+
+            /* Sample PCIe metrics (rate-limited to 1 Hz internally) */
+            extern void pcie_log_sample(void);
+            pcie_log_sample();
         }
 
         if (curr >= page) {
             page = curr + pktgen.page_timeout;
             pktgen_page_display();
         }
-
-        /* Manage DPDK timers (for PCIe logging) */
-        rte_timer_manage();
 
         rte_pause();
     }

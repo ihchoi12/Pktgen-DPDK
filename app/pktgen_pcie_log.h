@@ -38,6 +38,12 @@ int pcie_log_init(void);
 int pcie_log_start(void);
 
 /**
+ * Sample PCIe metrics (call this periodically, e.g., every stats update)
+ * Automatically rate-limits to 1 sample/second
+ */
+void pcie_log_sample(void);
+
+/**
  * Stop sampling and flush logs to file
  * Called automatically on pktgen exit
  */
