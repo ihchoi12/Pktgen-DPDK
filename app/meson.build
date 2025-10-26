@@ -8,6 +8,7 @@ fs = import('fs')
 pcm_base_path = meson.current_source_dir() / '..' / '..' / 'pcm'
 pcm_lib_path = pcm_base_path / 'build' / 'src'
 pcm_inc_path = pcm_base_path / 'src'
+common_pcm_path = meson.current_source_dir() / '..' / '..' / 'common' / 'pcm'
 
 # Check for PCM static library
 pcm_static_lib = pcm_lib_path / 'libpcm.a'
@@ -51,10 +52,10 @@ sources = files(
 	'xorshift64star.c',
 )
 
-# Add PCM wrapper if library found
+# Add common PCM wrapper if library found
 if pcm_found
-    sources += files('pktgen_pcm_wrapper.cpp')
-    message('PCM integration enabled with static linking')
+    sources += files('../../common/pcm/common_pcm_wrapper.cpp')
+    message('PCM integration enabled with common wrapper')
 endif
 
 if get_option('enable_lua')
@@ -71,7 +72,7 @@ cpp_args = []
 # Add PCM support if available
 if pcm_found
     # Only add PCM includes to C++ files, not C files to avoid conflicts
-    cpp_args += ['-I../../pcm/src']
+    cpp_args += ['-I../../pcm/src', '-I../../common/pcm']
     ldflags += [pcm_static_lib, '-static-libstdc++', '-static-libgcc', '-lpthread', '-ldl', '-lnuma']
 endif
 

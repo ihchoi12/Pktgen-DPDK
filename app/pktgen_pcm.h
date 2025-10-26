@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <rte_common.h>
 #include <rte_lcore.h>
-#include "pktgen_pcm_wrapper.h"
+#include "common_pcm_wrapper.h"
 
 /* Maximum number of performance events to track */
 #define PCM_MAX_EVENTS 16

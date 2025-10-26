@@ -6,7 +6,7 @@
 #define _GNU_SOURCE
 #endif
 #include "pktgen_pcm.h"
-#include "pktgen_pcm_wrapper.h"
+#include "common_pcm_wrapper.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
