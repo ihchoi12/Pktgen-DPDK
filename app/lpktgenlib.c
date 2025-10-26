@@ -53,6 +53,13 @@ pktgen_exit(lua_State *L __rte_unused)
     return 0;
 }
 
+static int
+pktgen_print_stats_summary(lua_State *L __rte_unused)
+{
+    print_pktgen_stats_summary();
+    return 0;
+}
+
 static inline double
 cycles_to_us(uint64_t cycles)
 {
@@ -3994,6 +4001,7 @@ static const luaL_Reg pktgenlib_range[] = {
 
 static const luaL_Reg pktgenlib[] = {
     {"quit", pktgen_exit},
+    {"print_stats", pktgen_print_stats_summary},
     {"set", pktgen_set}, /* Set a number of options */
 
     {"start", pktgen_start}, /* Start a set of ports sending packets */

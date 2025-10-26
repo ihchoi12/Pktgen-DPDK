@@ -180,13 +180,33 @@ allocate_port_info(uint16_t pid)
         goto leave;
     }
 
-    pinfo->rx_pkts = rte_calloc_socket("RxMbufs", MAX_PKT_RX_BURST, sizeof(struct rte_mbuf *),
-                                       RTE_CACHE_LINE_SIZE, sid);
-    pinfo->tx_pkts = rte_calloc_socket("TxMbufs", MAX_PKT_TX_BURST, sizeof(struct rte_mbuf *),
-                                       RTE_CACHE_LINE_SIZE, sid);
-    if (pinfo->rx_pkts == NULL || pinfo->tx_pkts == NULL) {
-        pktgen_log_error("Cannot allocate RX/TX burst for port %u", pid);
-        goto leave;
+    /* Allocate RX packet buffers for each queue */
+    for (int q = 0; q < 16; q++) {
+        pinfo->rx_pkts[q] = rte_calloc_socket("RxMbufs", MAX_PKT_RX_BURST, sizeof(struct rte_mbuf *),
+                                               RTE_CACHE_LINE_SIZE, sid);
+        if (pinfo->rx_pkts[q] == NULL) {
+            pktgen_log_error("Cannot allocate RX burst for port %u queue %d", pid, q);
+            /* Free previously allocated queues */
+            for (int i = 0; i < q; i++)
+                rte_free(pinfo->rx_pkts[i]);
+            goto leave;
+        }
+    }
+
+    /* Allocate TX burst for each queue */
+    for (int q = 0; q < 16; q++) {
+        pinfo->tx_pkts[q] = rte_calloc_socket("TxMbufs", MAX_PKT_TX_BURST, sizeof(struct rte_mbuf *),
+                                           RTE_CACHE_LINE_SIZE, sid);
+        if (pinfo->tx_pkts[q] == NULL) {
+            pktgen_log_error("Cannot allocate TX burst for port %u queue %d", pid, q);
+            /* Free all RX queues */
+            for (int i = 0; i < 16; i++)
+                rte_free(pinfo->rx_pkts[i]);
+            /* Free allocated TX queues */
+            for (int i = 0; i < q; i++)
+                rte_free(pinfo->tx_pkts[i]);
+            goto leave;
+        }
     }
 
     if (l2p_set_port_pinfo(pid, pinfo)) {
@@ -227,8 +247,10 @@ allocate_port_info(uint16_t pid)
     return pinfo;
 leave:
     if (pinfo) {
-        rte_free(pinfo->rx_pkts);
-        rte_free(pinfo->tx_pkts);
+        for (int q = 0; q < 16; q++) {
+            rte_free(pinfo->rx_pkts[q]);
+            rte_free(pinfo->tx_pkts[q]);
+        }
         rte_free(pinfo);
         l2p_set_port_pinfo(pid, NULL);
     }

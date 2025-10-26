@@ -133,8 +133,8 @@ typedef struct {
 typedef struct port_info_s {
     struct rte_eth_dev_info dev_info; /**< Device information */
     struct rte_eth_conf conf;         /**< Configuration settings */
-    struct rte_mbuf **rx_pkts;        /**< Array of pointers to packet buffers for RX */
-    struct rte_mbuf **tx_pkts;        /**< Array of pointers to packet buffers for TX */
+    struct rte_mbuf **rx_pkts[16];    /**< Array of pointers to packet buffers for RX per queue */
+    struct rte_mbuf **tx_pkts[16];    /**< Array of pointers to packet buffers for TX per queue */
 
     rte_atomic64_t port_flags;       /**< Special send flags for ARP and other */
     rte_atomic64_t transmit_count;   /**< Packets to transmit loaded into current_tx_count */

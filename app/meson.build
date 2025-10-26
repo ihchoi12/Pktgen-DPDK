@@ -1,3 +1,23 @@
+# Add C++ compiler support for PCM wrapper
+add_languages('cpp', required: true)
+
+# Import filesystem module
+fs = import('fs')
+
+# PCM library configuration for static linking
+pcm_base_path = meson.current_source_dir() / '..' / '..' / 'pcm'
+pcm_lib_path = pcm_base_path / 'build' / 'src'
+pcm_inc_path = pcm_base_path / 'src'
+
+# Check for PCM static library
+pcm_static_lib = pcm_lib_path / 'libpcm.a'
+pcm_found = false
+
+if fs.is_file(pcm_static_lib)
+    pcm_found = true
+    message('Found PCM static library: ' + pcm_static_lib)
+endif
+
 sources = files(
 	'cli-functions.c',
     'l2p.c',
@@ -27,14 +47,33 @@ sources = files(
 	'pktgen-vlan.c',
 	'pktgen-workq.c',
 	'pktgen.c',
+	'pktgen_pcm.c',
 	'xorshift64star.c',
 )
+
+# Add PCM wrapper if library found
+if pcm_found
+    sources += files('pktgen_pcm_wrapper.cpp')
+    message('PCM integration enabled with static linking')
+endif
 
 if get_option('enable_lua')
     sources += files('lpktgenlib.c')
 endif
 
 cflags = ['-D__PROJECT_VERSION="' + meson.project_version() + '"']
+
+# Initialize ldflags and includes
+ldflags = []
+includes = []
+cpp_args = []
+
+# Add PCM support if available
+if pcm_found
+    # Only add PCM includes to C++ files, not C files to avoid conflicts
+    cpp_args += ['-I../../pcm/src']
+    ldflags += [pcm_static_lib, '-static-libstdc++', '-static-libgcc', '-lpthread', '-ldl', '-lnuma']
+endif
 
 deps = [dpdk, common, utils, vec, plugin, cli, lua, hmap]
 
@@ -48,7 +87,7 @@ deps += [cc.find_library('rte_net_ice', dirs: [dpdk_libs_path], required: false)
 deps += [cc.find_library('rte_bus_vdev', dirs: [dpdk_libs_path], required: false)]
 
 deps += [dependency('threads')]
-deps += [dependency('numa', required: true)]
+deps += [dependency('numa', required: false)]
 deps += [dependency('pcap', required: true)]
 deps += [cc.find_library('dl', required: false)]
 deps += [cc.find_library('m', required: false)]
@@ -57,5 +96,8 @@ deps += [cc.find_library('bsd', required: true)]
 pktgen = executable('pktgen',
 		sources,
 		c_args: cflags,
+		cpp_args: cpp_args,
+		link_args: ldflags,
+		include_directories: includes,
 		install: true,
 		dependencies: [deps, lua_dep, dpdk_bond])

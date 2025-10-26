@@ -266,6 +266,11 @@ pktgen_page_stats(void)
     char buff[32];
     int display_cnt;
 
+    /* Only display stats if enabled */
+    if (!stats_enabled) {
+        return;
+    }
+
     if (pktgen.flags & PRINT_LABELS_FLAG)
         pktgen_print_static_data();
 
@@ -455,6 +460,11 @@ pktgen_process_stats(void)
     struct rte_eth_stats *curr, *rate, *prev, *base, *queue;
     port_info_t *pinfo;
     static unsigned int counter = 0;
+
+    /* Only process stats if enabled */
+    if (!stats_enabled) {
+        return;
+    }
 
     counter++;
     if (pktgen.flags & BLINK_PORTS_FLAG) {

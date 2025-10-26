@@ -3895,6 +3895,9 @@ pktgen_set_vxlan_seq(port_info_t *pinfo, uint32_t seqnum, uint32_t flag, uint32_
 void
 pktgen_quit(void)
 {
+    /* Print packet statistics summary before quitting */
+    print_pktgen_stats_summary();
+
     cli_quit();
 }
 

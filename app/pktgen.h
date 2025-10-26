@@ -41,6 +41,7 @@
 
 #include <rte_errno.h>
 #include <rte_log.h>
+#include "../../ak_debug_log.h"
 #include <rte_tailq.h>
 #include <rte_common.h>
 #include <rte_memory.h>
@@ -102,6 +103,9 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+static volatile bool stats_enabled = true;
+
 
 #define MAX_MATRIX_ENTRIES 128
 #define MAX_STRING         256
@@ -351,6 +355,7 @@ void pktgen_input_start(void);
 void stat_timer_dump(void);
 void stat_timer_clear(void);
 void pktgen_timer_setup(void);
+void print_pktgen_stats_summary(void);
 double next_poisson_time(double rateParameter);
 
 void pktgen_setup_packets(uint16_t pid);

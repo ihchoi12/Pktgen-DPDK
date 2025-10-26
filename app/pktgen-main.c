@@ -28,6 +28,7 @@
 #include "pktgen-display.h"
 #include "pktgen-log.h"
 #include "cli-functions.h"
+#include "pktgen_pcm.h"
 
 #ifdef LUA_ENABLED
 /**
@@ -327,6 +328,31 @@ sig_handler(int v __rte_unused)
 
     free(strings);
 
+    /* Print packet statistics summary before cleanup */
+    print_pktgen_stats_summary();
+
+    /* Print PCM monitoring statistics when stats_enabled is true */
+    extern volatile bool stats_enabled;
+    printf("DEBUG: sig_handler - stats_enabled = %s\n", stats_enabled ? "true" : "false");
+    if (stats_enabled) {
+        extern int pcm_monitoring_stop_all(void);
+        extern int pcm_monitoring_measure_all(void);
+        extern void pcm_print_core_statistics(void);
+        extern void pcm_print_memory_statistics(void);
+        extern void pcm_print_io_statistics(void);
+        extern void pcm_print_system_statistics(void);
+        printf("DEBUG: Signal handler - Stopping PCM monitoring...\n");
+        pcm_monitoring_stop_all();
+        printf("DEBUG: Signal handler - Measuring PCM stats...\n");
+        pcm_monitoring_measure_all();
+        printf("=== PCM Statistics ===\n");
+        pcm_print_core_statistics();
+        pcm_print_memory_statistics();
+        pcm_print_io_statistics();
+        pcm_print_system_statistics();
+        printf("=== End PCM Statistics ===\n");
+    }
+
     cli_destroy();
     scrn_destroy();
 
@@ -344,6 +370,34 @@ pktgen_lua_dofile(void *ld, const char *filename)
     return ret;
 }
 #endif
+
+/**
+ * PCM statistics atexit handler
+ */
+static void
+pcm_atexit_handler(void)
+{
+    extern volatile bool stats_enabled;
+    printf("DEBUG: atexit handler - stats_enabled = %s\n", stats_enabled ? "true" : "false");
+    if (stats_enabled) {
+        extern int pcm_monitoring_stop_all(void);
+        extern int pcm_monitoring_measure_all(void);
+        extern void pcm_print_core_statistics(void);
+        extern void pcm_print_memory_statistics(void);
+        extern void pcm_print_io_statistics(void);
+        extern void pcm_print_system_statistics(void);
+        printf("DEBUG: atexit handler - Stopping PCM monitoring...\n");
+        pcm_monitoring_stop_all();
+        printf("DEBUG: atexit handler - Measuring PCM stats...\n");
+        pcm_monitoring_measure_all();
+        printf("=== PCM Statistics ===\n");
+        pcm_print_core_statistics();
+        pcm_print_memory_statistics();
+        pcm_print_io_statistics();
+        pcm_print_system_statistics();
+        printf("=== End PCM Statistics ===\n");
+    }
+}
 
 /**
  *
@@ -514,6 +568,27 @@ main(int argc, char **argv)
     sigaddset(&set, SIGWINCH);
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
+    /* Initialize PCM monitoring when stats_enabled is true */
+    extern volatile bool stats_enabled;
+    printf("DEBUG: stats_enabled = %s\n", stats_enabled ? "true" : "false");
+    if (stats_enabled) {
+        extern int pcm_monitoring_init(void);
+        extern int pcm_monitoring_start_all(void);
+        printf("DEBUG: Attempting PCM initialization...\n");
+        int pcm_init_result = pcm_monitoring_init();
+        printf("DEBUG: PCM init result = %d\n", pcm_init_result);
+        if (pcm_init_result == 0) {
+            printf("PCM monitoring initialized successfully\n");
+            int pcm_start_result = pcm_monitoring_start_all();
+            printf("DEBUG: PCM start result = %d\n", pcm_start_result);
+
+            /* Register atexit handler for PCM statistics */
+            atexit(pcm_atexit_handler);
+        } else {
+            printf("PCM monitoring initialization failed or disabled\n");
+        }
+    }
+
     /* execute the command files if present */
     scrn_pause();
     cli_execute_cmdfiles();
@@ -559,10 +634,33 @@ main(int argc, char **argv)
 void
 pktgen_stop_running(void)
 {
+
 #ifdef LUA_ENABLED
     lua_execute_close(pktgen.ld);
 #endif
 
     pktgen.timer_running = 0;
     pktgen.force_quit    = 1;
+
+    /* Print PCM monitoring statistics when stats_enabled is true */
+    extern volatile bool stats_enabled;
+    printf("DEBUG: pktgen_stop_running - stats_enabled = %s\n", stats_enabled ? "true" : "false");
+    if (stats_enabled) {
+        extern int pcm_monitoring_stop_all(void);
+        extern int pcm_monitoring_measure_all(void);
+        extern void pcm_print_core_statistics(void);
+        extern void pcm_print_memory_statistics(void);
+        extern void pcm_print_io_statistics(void);
+        extern void pcm_print_system_statistics(void);
+        printf("DEBUG: Stopping PCM monitoring...\n");
+        pcm_monitoring_stop_all();
+        printf("DEBUG: Measuring PCM stats...\n");
+        pcm_monitoring_measure_all();
+        printf("=== PCM Statistics ===\n");
+        pcm_print_core_statistics();
+        pcm_print_memory_statistics();
+        pcm_print_io_statistics();
+        pcm_print_system_statistics();
+        printf("=== End PCM Statistics ===\n");
+    }
 }
