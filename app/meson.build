@@ -71,9 +71,11 @@ cpp_args = []
 
 # Add PCM support if available
 if pcm_found
-    # Add include paths for both C and C++ compilation
-    cflags += ['-I../../pcm/src', '-I../../common/pcm']
-    cpp_args += ['-I../../pcm/src', '-I../../common/pcm']
+    # Add include paths for both C and C++ compilation using absolute paths
+    cflags += ['-I' + meson.current_source_dir() / '..' / '..' / 'pcm' / 'src',
+               '-I' + meson.current_source_dir() / '..' / '..' / 'common' / 'pcm']
+    cpp_args += ['-I' + meson.current_source_dir() / '..' / '..' / 'pcm' / 'src',
+                 '-I' + meson.current_source_dir() / '..' / '..' / 'common' / 'pcm']
     ldflags += [pcm_static_lib, '-static-libstdc++', '-static-libgcc', '-lpthread', '-ldl', '-lnuma']
 endif
 
