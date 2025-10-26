@@ -573,11 +573,16 @@ main(int argc, char **argv)
     sigaddset(&set, SIGWINCH);
     pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
-    /* Initialize PCIe logging (always attempt, independent of stats_enabled) */
+    /* Initialize PCIe logging (controlled by PCIE_LOG_ENABLE environment variable) */
     extern int pcie_log_init(void);
     extern int pcie_log_start(void);
-    if (pcie_log_init() == 0) {
-        pcie_log_start();
+    const char* pcie_log_env = getenv("PCIE_LOG_ENABLE");
+    if (pcie_log_env && strcmp(pcie_log_env, "1") == 0) {
+        if (pcie_log_init() == 0) {
+            pcie_log_start();
+        }
+    } else {
+        printf("PCIe Log: Disabled (set PCIE_LOG_ENABLE=1 to enable)\n");
     }
 
     /* Initialize PCM monitoring when stats_enabled is true */
