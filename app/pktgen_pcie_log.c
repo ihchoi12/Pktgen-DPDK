@@ -62,10 +62,11 @@ static void *sampling_thread_func(void *arg)
 
     while (!thread_should_exit && logging_active) {
         /* Get instant PCIe counters from PCM */
-        uint64_t pcie_rd_bytes = 0, pcie_wr_bytes = 0;
+        uint64_t pcie_rd_bytes = 0, pcie_wr_bytes = 0, pci_rdcur = 0;
         int ret = pcm_wrapper_get_instant_pcie_bytes(PCIE_LOG_SOCKET_ID,
                                                       &pcie_rd_bytes,
-                                                      &pcie_wr_bytes);
+                                                      &pcie_wr_bytes,
+                                                      &pci_rdcur);
         if (ret < 0) {
             /* Log error on first few failures */
             static int error_count = 0;
@@ -81,6 +82,7 @@ static void *sampling_thread_func(void *arg)
         uint64_t now_us = get_timestamp_us();
         uint32_t idx = sample_index % PCIE_LOG_MAX_SAMPLES;
         samples[idx].timestamp_us = now_us;
+        samples[idx].pci_rdcur = pci_rdcur;
         samples[idx].pcie_rd_bytes = pcie_rd_bytes;
         samples[idx].pcie_wr_bytes = pcie_wr_bytes;
 
@@ -125,7 +127,7 @@ static void flush_samples_to_file(void)
     }
 
     /* Write CSV header */
-    fprintf(fp, "timestamp_us,pcie_rd_bytes,pcie_wr_bytes\n");
+    fprintf(fp, "timestamp_us,pci_rdcur,pcie_rd_bytes,pcie_wr_bytes\n");
 
     /* Calculate starting index (oldest sample in circular buffer) */
     if (sample_count < PCIE_LOG_MAX_SAMPLES) {
@@ -142,8 +144,9 @@ static void flush_samples_to_file(void)
     for (i = 0; i < sample_count; i++) {
         uint32_t idx = (start_idx + i) % PCIE_LOG_MAX_SAMPLES;
         uint64_t relative_timestamp = samples[idx].timestamp_us - baseline_timestamp;
-        fprintf(fp, "%lu,%lu,%lu\n",
+        fprintf(fp, "%lu,%lu,%lu,%lu\n",
                 relative_timestamp,
+                samples[idx].pci_rdcur,
                 samples[idx].pcie_rd_bytes,
                 samples[idx].pcie_wr_bytes);
     }

@@ -484,8 +484,8 @@ tx_send_packets(port_info_t *pinfo, uint16_t qid, struct rte_mbuf **pkts, uint16
 
         /* Get PCIe counters BEFORE transmission (instant snapshot) */
         if (pcm_available) {
-            extern int pcm_wrapper_get_instant_pcie_bytes(uint32_t socket_id, uint64_t *read, uint64_t *write);
-            int ret = pcm_wrapper_get_instant_pcie_bytes(socket_id, &pcie_read_before, &pcie_write_before);
+            extern int pcm_wrapper_get_instant_pcie_bytes(uint32_t socket_id, uint64_t *read, uint64_t *write, uint64_t *pci_rdcur);
+            int ret = pcm_wrapper_get_instant_pcie_bytes(socket_id, &pcie_read_before, &pcie_write_before, NULL);
             if (ret != 0) {
                 if (!pcm_debug_logged) {
                     AK_DEBUG_LOG_PKTGEN("[PCM TX BURST DEBUG] pcm_wrapper_get_instant_pcie_bytes failed with ret=%d on lcore=%u socket=%u\n",
@@ -513,8 +513,8 @@ tx_send_packets(port_info_t *pinfo, uint16_t qid, struct rte_mbuf **pkts, uint16
 #ifdef RTE_LIBRTE_ETHDEV_DEBUG
         /* Get PCIe counters AFTER transmission (instant snapshot) */
         if (pcm_available) {
-            extern int pcm_wrapper_get_instant_pcie_bytes(uint32_t socket_id, uint64_t *read, uint64_t *write);
-            if (pcm_wrapper_get_instant_pcie_bytes(socket_id, &pcie_read_after, &pcie_write_after) == 0) {
+            extern int pcm_wrapper_get_instant_pcie_bytes(uint32_t socket_id, uint64_t *read, uint64_t *write, uint64_t *pci_rdcur);
+            if (pcm_wrapper_get_instant_pcie_bytes(socket_id, &pcie_read_after, &pcie_write_after, NULL) == 0) {
                 /* Calculate PCIe bytes consumed for this transmission */
                 uint64_t pcie_read_delta = pcie_read_after - pcie_read_before;
                 uint64_t pcie_write_delta = pcie_write_after - pcie_write_before;
@@ -539,7 +539,7 @@ tx_send_packets(port_info_t *pinfo, uint16_t qid, struct rte_mbuf **pkts, uint16
 
                     /* Read PCIe counters again immediately to measure idle drift */
                     uint64_t pcie_read_idle = 0, pcie_write_idle = 0;
-                    if (pcm_wrapper_get_instant_pcie_bytes(socket_id, &pcie_read_idle, &pcie_write_idle) == 0) {
+                    if (pcm_wrapper_get_instant_pcie_bytes(socket_id, &pcie_read_idle, &pcie_write_idle, NULL) == 0) {
                         uint64_t idle_read_delta = pcie_read_idle - pcie_read_after;
                         uint64_t idle_write_delta = pcie_write_idle - pcie_write_after;
                         AK_DEBUG_LOG_PKTGEN("[PCM IDLE CHECK] lcore=%u socket=%u | No packets sent | "

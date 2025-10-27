@@ -21,6 +21,7 @@ extern "C" {
 /* Single PCIe sample */
 struct pcie_sample {
     uint64_t timestamp_us;      // Microseconds since epoch
+    uint64_t pci_rdcur;         // PCIRdCur counter
     uint64_t pcie_rd_bytes;     // PCIe Read bytes
     uint64_t pcie_wr_bytes;     // PCIe Write bytes
 };
