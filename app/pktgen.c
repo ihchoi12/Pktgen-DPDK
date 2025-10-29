@@ -1836,6 +1836,7 @@ print_pktgen_stats_summary(void)
 {
     unsigned int lcore_id;
     uint64_t total_rx = 0, total_tx = 0;
+    double total_rx_rate = 0.0, total_tx_rate = 0.0;
     uint64_t current_time = rte_rdtsc();
     uint64_t tsc_hz = rte_get_tsc_hz();
 
@@ -1849,7 +1850,7 @@ print_pktgen_stats_summary(void)
     printf("PKTGEN Packet Statistics Summary\n");
     printf("=====================================\n");
     printf("%-8s %-12s %-12s %-10s %-10s %-8s\n",
-        "Lcore", "RX Packets", "TX Packets", "RX Rate", "TX Rate", "Diff%");
+        "Lcore", "RX Packets", "TX Packets", "RX Mpps", "TX Mpps", "Diff%");
     printf("%-8s %-12s %-12s %-10s %-10s %-8s\n",
         "-----", "----------", "----------", "--------", "--------", "------");
 
@@ -1888,6 +1889,8 @@ print_pktgen_stats_summary(void)
 
             total_rx += lcore_stats[lcore_id].filtered_rx_packets;
             total_tx += lcore_stats[lcore_id].filtered_tx_packets;
+            total_rx_rate += rx_rate / 1000000.0;
+            total_tx_rate += tx_rate / 1000000.0;
         }
     }
 
@@ -1925,8 +1928,8 @@ print_pktgen_stats_summary(void)
 
     printf("%-8s %-12s %-12s %-10s %-10s %-8s\n",
         "-----", "----------", "----------", "--------", "--------", "------");
-    printf("%-8s %-12" PRIu64 " %-12" PRIu64 " %-10s %-10s %-8.1f\n",
-        "Total", total_rx, total_tx, "", "", rate);
+    printf("%-8s %-12" PRIu64 " %-12" PRIu64 " %-10.1f %-10.1f %-8.1f\n",
+        "Total", total_rx, total_tx, total_rx_rate, total_tx_rate, rate);
     printf("=====================================\n");
     printf("ANALYSIS: RX/TX difference = %+" PRId64 " packets (%.1f%% %s)\n",
         difference, rate, rate_type);
