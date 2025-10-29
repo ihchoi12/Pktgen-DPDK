@@ -331,10 +331,11 @@ sig_handler(int v __rte_unused)
     /* Print packet statistics summary before cleanup */
     print_pktgen_stats_summary();
 
-    /* Print PCM monitoring statistics when stats_enabled is true */
-    extern volatile bool stats_enabled;
-    printf("DEBUG: sig_handler - stats_enabled = %s\n", stats_enabled ? "true" : "false");
-    if (stats_enabled) {
+    /* Print PCM monitoring statistics when PCM is enabled */
+    const char* disable_pcm = getenv("DISABLE_PCM");
+    int pcm_enabled = !(disable_pcm && (strcmp(disable_pcm, "1") == 0 || strcasecmp(disable_pcm, "true") == 0));
+
+    if (pcm_enabled) {
         extern int pcm_monitoring_stop_all(void);
         extern int pcm_monitoring_measure_all(void);
         extern void pcm_print_core_statistics(void);
@@ -377,14 +378,16 @@ pktgen_lua_dofile(void *ld, const char *filename)
 static void
 pcm_atexit_handler(void)
 {
-    extern volatile bool stats_enabled;
     extern void pcie_log_stop(void);
 
     /* Stop and flush PCIe logging first */
     pcie_log_stop();
 
-    printf("DEBUG: atexit handler - stats_enabled = %s\n", stats_enabled ? "true" : "false");
-    if (stats_enabled) {
+    /* Check if PCM is enabled */
+    const char* disable_pcm = getenv("DISABLE_PCM");
+    int pcm_enabled = !(disable_pcm && (strcmp(disable_pcm, "1") == 0 || strcasecmp(disable_pcm, "true") == 0));
+
+    if (pcm_enabled) {
         extern int pcm_monitoring_stop_all(void);
         extern int pcm_monitoring_measure_all(void);
         extern void pcm_print_core_statistics(void);
@@ -585,10 +588,11 @@ main(int argc, char **argv)
         printf("PCIe Log: Disabled (set PCIE_LOG_ENABLE=1 to enable)\n");
     }
 
-    /* Initialize PCM monitoring when stats_enabled is true */
-    extern volatile bool stats_enabled;
-    printf("DEBUG: stats_enabled = %s\n", stats_enabled ? "true" : "false");
-    if (stats_enabled) {
+    /* Initialize PCM monitoring when DISABLE_PCM is not set */
+    const char* disable_pcm_env = getenv("DISABLE_PCM");
+    int pcm_enabled = !(disable_pcm_env && (strcmp(disable_pcm_env, "1") == 0 || strcasecmp(disable_pcm_env, "true") == 0));
+
+    if (pcm_enabled) {
         extern int pcm_monitoring_init(void);
         extern int pcm_monitoring_start_all(void);
         printf("DEBUG: Attempting PCM initialization...\n");
@@ -598,16 +602,13 @@ main(int argc, char **argv)
             printf("PCM monitoring initialized successfully\n");
             int pcm_start_result = pcm_monitoring_start_all();
             printf("DEBUG: PCM start result = %d\n", pcm_start_result);
-
-            /* Register atexit handler for PCM statistics */
-            atexit(pcm_atexit_handler);
         } else {
-            printf("PCM monitoring initialization failed or disabled\n");
+            printf("PCM monitoring initialization failed\n");
         }
-    } else {
-        /* Even if stats_enabled is false, register atexit for PCIe log flush */
-        atexit(pcm_atexit_handler);
     }
+
+    /* Register atexit handler for cleanup (handles both PCM and PCIe logging) */
+    atexit(pcm_atexit_handler);
 
     /* execute the command files if present */
     scrn_pause();
@@ -662,10 +663,11 @@ pktgen_stop_running(void)
     pktgen.timer_running = 0;
     pktgen.force_quit    = 1;
 
-    /* Print PCM monitoring statistics when stats_enabled is true */
-    extern volatile bool stats_enabled;
-    printf("DEBUG: pktgen_stop_running - stats_enabled = %s\n", stats_enabled ? "true" : "false");
-    if (stats_enabled) {
+    /* Print PCM monitoring statistics when PCM is enabled */
+    const char* disable_pcm = getenv("DISABLE_PCM");
+    int pcm_enabled = !(disable_pcm && (strcmp(disable_pcm, "1") == 0 || strcasecmp(disable_pcm, "true") == 0));
+
+    if (pcm_enabled) {
         extern int pcm_monitoring_stop_all(void);
         extern int pcm_monitoring_measure_all(void);
         extern void pcm_print_core_statistics(void);
