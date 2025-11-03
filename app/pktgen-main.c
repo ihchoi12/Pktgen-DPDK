@@ -405,6 +405,8 @@ pcm_atexit_handler(void)
         pcm_print_system_statistics();
         printf("=== End PCM Statistics ===\n");
     }
+
+    /* AK queue depth report is handled by MLX5 driver destructor */
 }
 
 /**
@@ -525,6 +527,8 @@ main(int argc, char **argv)
 
     /* Configure and initialize the ports */
     pktgen_config_ports();
+
+    /* AK queue depth tracking is initialized automatically by MLX5 driver constructor */
 
     if (pktgen.verbose) {
         pktgen_log_info("");
