@@ -6,7 +6,7 @@ package.path = package.path .. ";./?.lua;?.lua;test/?.lua;app/?.lua;"
 require "Pktgen"
 
 local port = 0
-local sleeptime = tonumber(os.getenv("PKTGEN_DURATION")) or 5
+local sleeptime = tonumber(os.getenv("PKTGEN_DURATION")) or 20
 local packet_size = tonumber(os.getenv("PKTGEN_PACKET_SIZE")) or 64
 
 pktgen.stop(port)
@@ -76,10 +76,10 @@ pktgen.set_range(port, "on")
 pktgen.delay(100)
 
 -- Start transmission
-print("Starting packet transmission for")
+print("Starting packet transmission for " .. sleeptime .. " seconds")
 pktgen.start(port)
 
-pktgen.delay(10000) -- sleep time in milliseconds
+pktgen.delay(sleeptime * 1000) -- sleep time in milliseconds
 
 -- Stop transmission BEFORE reading statistics
 print("Stopping packet transmission...")
