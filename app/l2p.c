@@ -92,8 +92,7 @@ parse_cores(uint16_t pid, const char *cores, int mode)
     l2p_t *l2p       = l2p_get();
     l2p_port_t *port = &l2p->ports[pid];
     char *core_map   = NULL;
-    int num_cores    = 0, l, h, num_fields;
-    char *fields[3]  = {0}, *f0, *f1;
+    int num_cores    = 0;
     int mbuf_count   = MAX_MBUFS_PER_PORT(DEFAULT_RX_DESC, DEFAULT_TX_DESC);
     char name[64];
 
@@ -103,72 +102,87 @@ parse_cores(uint16_t pid, const char *cores, int mode)
 
     snprintf(core_map, MAX_ALLOCA_SIZE - 1, "%s", cores);
 
-    num_fields = rte_strsplit(core_map, strlen(core_map), fields, RTE_DIM(fields), '-');
-    if (num_fields <= 0 || num_fields > 2)
+    /* First, split by '/' to handle multiple core specifications like "2/4/6" */
+    char *slash_fields[RTE_MAX_LCORE] = {0};
+    int num_slash_fields = rte_strsplit(core_map, strlen(core_map), slash_fields, RTE_DIM(slash_fields), '/');
+    if (num_slash_fields <= 0)
         rte_exit(EXIT_FAILURE, "invalid core mapping '%s'\n", cores);
-    f0 = fields[0];
-    f1 = (fields[1] == NULL) ? f0 : fields[1];
-    f0 = pg_strtrimset(f0, "[]");
-    f0 = pg_strtrimset(f0, "{}");
-    f1 = pg_strtrimset(f1, "[]");
-    f1 = pg_strtrimset(f1, "{}");
 
-    l = strtol(f0, NULL, 10);
-    h = strtol(f1, NULL, 10);
+    /* Process each slash-separated field (can be single core or range) */
+    for (int i = 0; i < num_slash_fields; i++) {
+        char *fields[3] = {0}, *f0, *f1;
+        int l, h, num_fields;
 
-    do {
-        l2p_lport_t *lport;
-        int32_t sid = pg_eth_dev_socket_id(port->pid);
+        /* Split by '-' to handle ranges like "2-5" */
+        num_fields = rte_strsplit(slash_fields[i], strlen(slash_fields[i]), fields, RTE_DIM(fields), '-');
+        if (num_fields <= 0 || num_fields > 2)
+            rte_exit(EXIT_FAILURE, "invalid core mapping '%s'\n", slash_fields[i]);
 
-        lport = l2p->lports[l];
-        if (lport == NULL) {
-            snprintf(name, sizeof(name) - 1, "lport-%u:%u", l, port->pid);
-            lport = rte_zmalloc_socket(name, sizeof(l2p_lport_t), RTE_CACHE_LINE_SIZE, sid);
-            if (!lport)
-                rte_exit(EXIT_FAILURE, "Failed to allocate memory for lport info\n");
-            lport->lid = l;
+        f0 = fields[0];
+        f1 = (fields[1] == NULL) ? f0 : fields[1];
+        f0 = pg_strtrimset(f0, "[]");
+        f0 = pg_strtrimset(f0, "{}");
+        f1 = pg_strtrimset(f1, "[]");
+        f1 = pg_strtrimset(f1, "{}");
 
-            l2p->lports[l] = lport;
-        } else
-            printf("Err: lcore %u already in use\n", l);
+        l = strtol(f0, NULL, 10);
+        h = strtol(f1, NULL, 10);
 
-        num_cores++;
-        lport->port = port;
-        lport->mode = mode;
-        switch (mode) {
-        case LCORE_MODE_RX:
-            lport->rx_qid = port->num_rx_qids++;
-            break;
-        case LCORE_MODE_TX:
-            lport->tx_qid = port->num_tx_qids++;
-            break;
-        case LCORE_MODE_BOTH:
-            lport->rx_qid = port->num_rx_qids++;
-            lport->tx_qid = port->num_tx_qids++;
-            break;
-        default:
-            rte_exit(EXIT_FAILURE, "invalid port mode\n");
-            break;
-        }
+        /* Assign cores in range [l, h] */
+        do {
+            l2p_lport_t *lport;
+            int32_t sid = pg_eth_dev_socket_id(port->pid);
 
-        if (port->rx_mp == NULL) {
-            /* Create the Rx mbuf pool one per lcore/port/queue */
-            port->rx_mp = l2p_pktmbuf_create("RX", lport, port, mbuf_count, MEMPOOL_CACHE_SIZE);
-            if (port->rx_mp == NULL)
-                rte_exit(EXIT_FAILURE, "Cannot init port %d for Default RX mbufs", port->pid);
-        }
-        if (port->tx_mp == NULL) {
-            port->tx_mp = l2p_pktmbuf_create("TX", lport, port, mbuf_count, MEMPOOL_CACHE_SIZE);
-            if (port->tx_mp == NULL)
-                rte_exit(EXIT_FAILURE, "Cannot init port %d for Default TX mbufs", port->pid);
-        }
-        if (port->special_mp == NULL) {
-            /* Used for sending special packets like ARP requests */
-            port->special_mp = l2p_pktmbuf_create("SP", lport, port, MAX_SPECIAL_MBUFS, 0);
-            if (port->special_mp == NULL)
-                rte_exit(EXIT_FAILURE, "Cannot init port %d for Special TX mbufs", pid);
-        }
-    } while (l++ < h);
+            lport = l2p->lports[l];
+            if (lport == NULL) {
+                snprintf(name, sizeof(name) - 1, "lport-%u:%u", l, port->pid);
+                lport = rte_zmalloc_socket(name, sizeof(l2p_lport_t), RTE_CACHE_LINE_SIZE, sid);
+                if (!lport)
+                    rte_exit(EXIT_FAILURE, "Failed to allocate memory for lport info\n");
+                lport->lid = l;
+
+                l2p->lports[l] = lport;
+            } else
+                printf("Err: lcore %u already in use\n", l);
+
+            num_cores++;
+            lport->port = port;
+            lport->mode = mode;
+            switch (mode) {
+            case LCORE_MODE_RX:
+                lport->rx_qid = port->num_rx_qids++;
+                break;
+            case LCORE_MODE_TX:
+                lport->tx_qid = port->num_tx_qids++;
+                break;
+            case LCORE_MODE_BOTH:
+                lport->rx_qid = port->num_rx_qids++;
+                lport->tx_qid = port->num_tx_qids++;
+                break;
+            default:
+                rte_exit(EXIT_FAILURE, "invalid port mode\n");
+                break;
+            }
+
+            if (port->rx_mp == NULL) {
+                /* Create the Rx mbuf pool one per lcore/port/queue */
+                port->rx_mp = l2p_pktmbuf_create("RX", lport, port, mbuf_count, MEMPOOL_CACHE_SIZE);
+                if (port->rx_mp == NULL)
+                    rte_exit(EXIT_FAILURE, "Cannot init port %d for Default RX mbufs", port->pid);
+            }
+            if (port->tx_mp == NULL) {
+                port->tx_mp = l2p_pktmbuf_create("TX", lport, port, mbuf_count, MEMPOOL_CACHE_SIZE);
+                if (port->tx_mp == NULL)
+                    rte_exit(EXIT_FAILURE, "Cannot init port %d for Default TX mbufs", port->pid);
+            }
+            if (port->special_mp == NULL) {
+                /* Used for sending special packets like ARP requests */
+                port->special_mp = l2p_pktmbuf_create("SP", lport, port, MAX_SPECIAL_MBUFS, 0);
+                if (port->special_mp == NULL)
+                    rte_exit(EXIT_FAILURE, "Cannot init port %d for Special TX mbufs", pid);
+            }
+        } while (l++ < h);
+    }
 
     return num_cores;
 }
