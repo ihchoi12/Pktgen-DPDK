@@ -6,7 +6,7 @@ package.path = package.path .. ";./?.lua;?.lua;test/?.lua;app/?.lua;"
 require "Pktgen"
 
 local port = 0
-local sleeptime = tonumber(os.getenv("PKTGEN_DURATION")) or 20
+local sleeptime = tonumber(os.getenv("PKTGEN_DURATION")) or 5
 local packet_size = tonumber(os.getenv("PKTGEN_PACKET_SIZE")) or 64
 
 pktgen.stop(port)

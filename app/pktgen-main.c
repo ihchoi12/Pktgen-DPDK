@@ -332,8 +332,8 @@ sig_handler(int v __rte_unused)
     print_pktgen_stats_summary();
 
     /* Print PCM monitoring statistics when PCM is enabled */
-    const char* disable_pcm = getenv("DISABLE_PCM");
-    int pcm_enabled = !(disable_pcm && (strcmp(disable_pcm, "1") == 0 || strcasecmp(disable_pcm, "true") == 0));
+    const char* enable_pcm = getenv("ENABLE_PCM");
+    int pcm_enabled = (enable_pcm && (strcmp(enable_pcm, "1") == 0 || strcasecmp(enable_pcm, "true") == 0));
 
     if (pcm_enabled) {
         extern int pcm_monitoring_stop_all(void);
@@ -384,8 +384,8 @@ pcm_atexit_handler(void)
     pcie_log_stop();
 
     /* Check if PCM is enabled */
-    const char* disable_pcm = getenv("DISABLE_PCM");
-    int pcm_enabled = !(disable_pcm && (strcmp(disable_pcm, "1") == 0 || strcasecmp(disable_pcm, "true") == 0));
+    const char* enable_pcm = getenv("ENABLE_PCM");
+    int pcm_enabled = (enable_pcm && (strcmp(enable_pcm, "1") == 0 || strcasecmp(enable_pcm, "true") == 0));
 
     if (pcm_enabled) {
         extern int pcm_monitoring_stop_all(void);
@@ -592,9 +592,9 @@ main(int argc, char **argv)
         printf("PCIe Log: Disabled (set PCIE_LOG_ENABLE=1 to enable)\n");
     }
 
-    /* Initialize PCM monitoring when DISABLE_PCM is not set */
-    const char* disable_pcm_env = getenv("DISABLE_PCM");
-    int pcm_enabled = !(disable_pcm_env && (strcmp(disable_pcm_env, "1") == 0 || strcasecmp(disable_pcm_env, "true") == 0));
+    /* Initialize PCM monitoring when ENABLE_PCM is set */
+    const char* enable_pcm_env = getenv("ENABLE_PCM");
+    int pcm_enabled = (enable_pcm_env && (strcmp(enable_pcm_env, "1") == 0 || strcasecmp(enable_pcm_env, "true") == 0));
 
     if (pcm_enabled) {
         extern int pcm_monitoring_init(void);
@@ -668,8 +668,8 @@ pktgen_stop_running(void)
     pktgen.force_quit    = 1;
 
     /* Print PCM monitoring statistics when PCM is enabled */
-    const char* disable_pcm = getenv("DISABLE_PCM");
-    int pcm_enabled = !(disable_pcm && (strcmp(disable_pcm, "1") == 0 || strcasecmp(disable_pcm, "true") == 0));
+    const char* enable_pcm = getenv("ENABLE_PCM");
+    int pcm_enabled = (enable_pcm && (strcmp(enable_pcm, "1") == 0 || strcasecmp(enable_pcm, "true") == 0));
 
     if (pcm_enabled) {
         extern int pcm_monitoring_stop_all(void);

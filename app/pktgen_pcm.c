@@ -58,10 +58,10 @@ int pcm_monitoring_init(void)
         return 0;
     }
 
-    /* Check if PCM is disabled via environment variable */
-    const char* disable_pcm = getenv("DISABLE_PCM");
-    if (disable_pcm && (strcmp(disable_pcm, "1") == 0 || strcasecmp(disable_pcm, "true") == 0)) {
-        printf("PCM monitoring disabled by DISABLE_PCM environment variable\n");
+    /* Check if PCM is enabled via environment variable (disabled by default) */
+    const char* enable_pcm = getenv("ENABLE_PCM");
+    if (!(enable_pcm && (strcmp(enable_pcm, "1") == 0 || strcasecmp(enable_pcm, "true") == 0))) {
+        printf("PCM monitoring disabled (set ENABLE_PCM=1 to enable)\n");
         return -1;
     }
 
