@@ -68,7 +68,7 @@ cflags = ['-D__PROJECT_VERSION="' + meson.project_version() + '"']
 # Initialize ldflags and includes
 ldflags = []
 includes = []
-cpp_args = []
+cpp_args = ['-Wno-pedantic']
 
 # Add PCM support if available
 if pcm_found
