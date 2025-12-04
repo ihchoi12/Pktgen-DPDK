@@ -226,7 +226,7 @@ pktgen_get_link_status(port_info_t *pinfo)
     if (rte_eth_link_get_nowait(pinfo->pid, &link) == 0) {
         if (link.link_speed == RTE_ETH_SPEED_NUM_UNKNOWN) {
             /* Setup a few default values to prevent problems later. */
-            link.link_speed   = RTE_ETH_SPEED_NUM_10G;
+            link.link_speed   = RTE_ETH_SPEED_NUM_100G;
             link.link_duplex  = RTE_ETH_LINK_FULL_DUPLEX;
             link.link_autoneg = RTE_ETH_LINK_SPEED_AUTONEG;
             link.link_status  = RTE_ETH_LINK_UP;
