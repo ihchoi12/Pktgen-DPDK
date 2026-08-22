@@ -17,6 +17,7 @@ TXlib */
 #include <rte_net.h>
 #include <rte_arp.h>
 #include <rte_cycles.h>
+#include <rte_telemetry.h>
 #include <rte_hexdump.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -34,6 +35,7 @@ extern uint64_t ak_target_burst_interval;
 #include "pktgen-ipv6.h"
 #include "pktgen-udp.h"
 #include "pktgen-arp.h"
+#include "pktgen-cmds.h"
 #include "pktgen-vlan.h"
 #include "pktgen-cpu.h"
 #include "pktgen-display.h"
@@ -78,8 +80,19 @@ typedef struct {
 /* Per-core RX drop analysis */
 static rx_drop_analysis_t rx_analysis[RTE_MAX_LCORE];
 
+/* AK: per-lcore histogram of rte_eth_tx_burst() call durations (TSC cycles).
+ * Uses log2 bucketing (bucket b counts events with 2^b <= dur < 2^(b+1)).
+ */
+#define AK_TX_BURST_HIST_BUCKETS 32
+static uint64_t ak_tx_burst_hist[RTE_MAX_LCORE][AK_TX_BURST_HIST_BUCKETS];
+static uint64_t ak_tx_burst_min[RTE_MAX_LCORE];
+static uint64_t ak_tx_burst_max[RTE_MAX_LCORE];
+static uint64_t ak_tx_burst_sum[RTE_MAX_LCORE];
+static uint64_t ak_tx_burst_count[RTE_MAX_LCORE];
+
 /* Function to print packet statistics summary */
 void print_pktgen_stats_summary(void);
+void print_ak_tx_burst_hist(void);
 
 /* Function to print NIC hardware statistics */
 void print_nic_hw_stats(uint16_t port_id);
@@ -574,12 +587,30 @@ tx_send_packets(port_info_t *pinfo, uint16_t qid, struct rte_mbuf **pkts, uint16
             }
         }
 #endif
+        /* AK: instrument outer app-burst latency — time the full do-while loop
+         * that drains the app-level burst (DEFAULT_PKT_TX_BURST packets) to NIC,
+         * including any internal retries when the NIC accepts < to_send at once. */
+        uint64_t ak_t0 = rte_rdtsc();
         do {
             AK_DEBUG_LOG_PKTGEN("[1] rte_eth_tx_burst()");
             sent = rte_eth_tx_burst(pinfo->pid, qid, pkts, to_send);
             to_send -= sent;
             pkts += sent;
         } while (to_send > 0);
+        {
+            uint64_t ak_dur = rte_rdtsc() - ak_t0;
+            unsigned ak_lid = rte_lcore_id();
+            int ak_bucket = (ak_dur > 0) ? (63 - __builtin_clzll(ak_dur)) : 0;
+            if (ak_bucket >= AK_TX_BURST_HIST_BUCKETS)
+                ak_bucket = AK_TX_BURST_HIST_BUCKETS - 1;
+            ak_tx_burst_hist[ak_lid][ak_bucket]++;
+            if (ak_tx_burst_count[ak_lid] == 0 || ak_dur < ak_tx_burst_min[ak_lid])
+                ak_tx_burst_min[ak_lid] = ak_dur;
+            if (ak_dur > ak_tx_burst_max[ak_lid])
+                ak_tx_burst_max[ak_lid] = ak_dur;
+            ak_tx_burst_sum[ak_lid] += ak_dur;
+            ak_tx_burst_count[ak_lid]++;
+        }
 #ifdef AK_ENABLE_QUEUE_DEPTH_TRACKING
         /* AK: Track burst processing time (including retry loop) */
         {
@@ -1377,7 +1408,22 @@ fast_main_transmit(port_info_t *pinfo, uint16_t qid)
         if (rte_mempool_get_bulk(mp, (void **)pkts, pinfo->tx_burst) == 0) {
             uint16_t sent, send = pinfo->tx_burst;
             do {
+                /* AK: instrument tx_burst call latency (TSC cycles) */
+                uint64_t ak_t0 = rte_rdtsc();
                 sent = rte_eth_tx_burst(pinfo->pid, qid, pkts, send);
+                uint64_t ak_dur = rte_rdtsc() - ak_t0;
+                unsigned ak_lid = rte_lcore_id();
+                int ak_bucket = (ak_dur > 0) ? (63 - __builtin_clzll(ak_dur)) : 0;
+                if (ak_bucket >= AK_TX_BURST_HIST_BUCKETS)
+                    ak_bucket = AK_TX_BURST_HIST_BUCKETS - 1;
+                ak_tx_burst_hist[ak_lid][ak_bucket]++;
+                if (ak_tx_burst_count[ak_lid] == 0 || ak_dur < ak_tx_burst_min[ak_lid])
+                    ak_tx_burst_min[ak_lid] = ak_dur;
+                if (ak_dur > ak_tx_burst_max[ak_lid])
+                    ak_tx_burst_max[ak_lid] = ak_dur;
+                ak_tx_burst_sum[ak_lid] += ak_dur;
+                ak_tx_burst_count[ak_lid]++;
+
                 send -= sent;
                 pkts += sent;
             } while (send > 0);
@@ -2030,6 +2076,168 @@ print_pktgen_stats_summary(void)
 
     /* Print RX drop analysis */
     print_rx_drop_analysis();
+
+    /* AK: per-lcore tx_burst() call latency histogram */
+    print_ak_tx_burst_hist();
+}
+
+/**
+ * print_ak_tx_burst_hist - dump per-lcore tx_burst() call latency histogram
+ *
+ * Buckets are log2 of TSC cycle deltas around the rte_eth_tx_burst() call in
+ * fast_main_transmit(). Output format is machine-readable so run_test.py can
+ * parse it without scraping.
+ */
+
+/* AK: telemetry surface for the external tuner.
+ *
+ * /pktgen/tx_burst_lat[,reset]  aggregate call-latency stats (log2 buckets
+ *                               -> count, mean, p50, p99 in nanoseconds)
+ * /pktgen/tx_burst_set,<port>,<n>  set the per-call burst size at run time
+ *
+ * The histogram is written by the TX lcores without synchronization; the
+ * reader tolerates torn counts because it only needs distribution shape.
+ */
+static uint64_t
+ak_bucket_percentile(uint64_t total, double q)
+{
+    uint64_t acc = 0, target = (uint64_t)(q * (double)total);
+    unsigned int lcore_id;
+    uint64_t agg[AK_TX_BURST_HIST_BUCKETS] = {0};
+
+    RTE_LCORE_FOREACH(lcore_id) {
+        for (int b = 0; b < AK_TX_BURST_HIST_BUCKETS; b++)
+            agg[b] += ak_tx_burst_hist[lcore_id][b];
+    }
+    for (int b = 0; b < AK_TX_BURST_HIST_BUCKETS; b++) {
+        acc += agg[b];
+        if (acc >= target)
+            return 1ULL << b;     /* lower edge of the containing bucket */
+    }
+    return 0;
+}
+
+static int
+pktgen_tx_burst_lat_handler(const char *cmd __rte_unused, const char *params,
+                            struct rte_tel_data *info)
+{
+    unsigned int lcore_id;
+    uint64_t count = 0, sum = 0, mn = UINT64_MAX, mx = 0;
+    uint64_t hz = rte_get_tsc_hz();
+
+    RTE_LCORE_FOREACH(lcore_id) {
+        if (ak_tx_burst_count[lcore_id] == 0)
+            continue;
+        count += ak_tx_burst_count[lcore_id];
+        sum += ak_tx_burst_sum[lcore_id];
+        if (ak_tx_burst_min[lcore_id] < mn)
+            mn = ak_tx_burst_min[lcore_id];
+        if (ak_tx_burst_max[lcore_id] > mx)
+            mx = ak_tx_burst_max[lcore_id];
+    }
+    rte_tel_data_start_dict(info);
+    rte_tel_data_add_dict_uint(info, "count", count);
+    if (count) {
+        double c2ns = 1e9 / (double)hz;
+        rte_tel_data_add_dict_uint(info, "mean_ns",
+                                  (uint64_t)((double)(sum / count) * c2ns));
+        rte_tel_data_add_dict_uint(info, "min_ns", (uint64_t)((double)mn * c2ns));
+        rte_tel_data_add_dict_uint(info, "max_ns", (uint64_t)((double)mx * c2ns));
+        rte_tel_data_add_dict_uint(info, "p50_ns",
+            (uint64_t)((double)ak_bucket_percentile(count, 0.50) * c2ns));
+        rte_tel_data_add_dict_uint(info, "p99_ns",
+            (uint64_t)((double)ak_bucket_percentile(count, 0.99) * c2ns));
+    }
+    if (params != NULL && strncmp(params, "reset", 5) == 0) {
+        RTE_LCORE_FOREACH(lcore_id) {
+            memset(ak_tx_burst_hist[lcore_id], 0,
+                   sizeof(ak_tx_burst_hist[lcore_id]));
+            ak_tx_burst_count[lcore_id] = 0;
+            ak_tx_burst_sum[lcore_id] = 0;
+            ak_tx_burst_min[lcore_id] = UINT64_MAX;
+            ak_tx_burst_max[lcore_id] = 0;
+        }
+        rte_tel_data_add_dict_string(info, "reset", "done");
+    }
+    return 0;
+}
+
+static int
+pktgen_tx_burst_set_handler(const char *cmd __rte_unused, const char *params,
+                            struct rte_tel_data *info)
+{
+    unsigned long port, burst;
+    port_info_t *pinfo;
+    char *end;
+
+    rte_tel_data_start_dict(info);
+    if (params == NULL) {
+        rte_tel_data_add_dict_string(info, "status", "missing params");
+        return 0;
+    }
+    port = strtoul(params, &end, 10);
+    if (end == params || *end != ',' || port >= RTE_MAX_ETHPORTS) {
+        rte_tel_data_add_dict_string(info, "status", "bad port");
+        return 0;
+    }
+    burst = strtoul(end + 1, &end, 10);
+    if (burst < 1 || burst > 256) {
+        rte_tel_data_add_dict_string(info, "status", "bad burst");
+        return 0;
+    }
+    pinfo = l2p_get_port_pinfo(port);
+    if (pinfo == NULL) {
+        rte_tel_data_add_dict_string(info, "status", "no port");
+        return 0;
+    }
+    single_set_tx_burst(pinfo, (uint32_t)burst);
+    rte_tel_data_add_dict_string(info, "status", "ok");
+    rte_tel_data_add_dict_uint(info, "port", (uint64_t)port);
+    rte_tel_data_add_dict_uint(info, "burst", (uint64_t)burst);
+    return 0;
+}
+
+RTE_INIT(pktgen_ak_telemetry_init)
+{
+    rte_telemetry_register_cmd("/pktgen/tx_burst_lat",
+                               pktgen_tx_burst_lat_handler,
+                               "TX burst call latency stats. Params: [reset]");
+    rte_telemetry_register_cmd("/pktgen/tx_burst_set",
+                               pktgen_tx_burst_set_handler,
+                               "Set TX burst size. Params: <port>,<burst>");
+}
+
+void
+print_ak_tx_burst_hist(void)
+{
+    unsigned int lcore_id;
+    uint64_t tsc_hz = rte_get_tsc_hz();
+
+    printf("\n=====================================\n");
+    printf("AK TX_BURST Call Latency Histogram\n");
+    printf("=====================================\n");
+    printf("TSC freq: %" PRIu64 " Hz (1 cycle = %.3f ns)\n",
+           tsc_hz, 1e9 / (double)tsc_hz);
+
+    RTE_LCORE_FOREACH(lcore_id) {
+        if (ak_tx_burst_count[lcore_id] == 0)
+            continue;
+        uint64_t avg = ak_tx_burst_sum[lcore_id] / ak_tx_burst_count[lcore_id];
+        printf("\nAK_HIST lcore=%u count=%" PRIu64
+               " min=%" PRIu64 " max=%" PRIu64 " avg=%" PRIu64 " cycles\n",
+               lcore_id, ak_tx_burst_count[lcore_id],
+               ak_tx_burst_min[lcore_id], ak_tx_burst_max[lcore_id], avg);
+        for (int b = 0; b < AK_TX_BURST_HIST_BUCKETS; b++) {
+            if (ak_tx_burst_hist[lcore_id][b] == 0)
+                continue;
+            uint64_t lo = 1ULL << b;
+            uint64_t hi = (b + 1 < 64) ? ((1ULL << (b + 1)) - 1) : UINT64_MAX;
+            printf("  AK_BUCKET lcore=%u b=%d range=%" PRIu64 "-%" PRIu64
+                   " count=%" PRIu64 "\n",
+                   lcore_id, b, lo, hi, ak_tx_burst_hist[lcore_id][b]);
+        }
+    }
+    printf("=====================================\n");
 }
 
 /**
